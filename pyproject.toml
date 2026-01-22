@@ -1,0 +1,81 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "pyalicevisionlib"
+version = "0.1.0"
+description = "Python utilities for AliceVision/Meshroom: camera handling, mesh evaluation, and visualization"
+readme = "README.md"
+license = "MIT"
+authors = [
+    { name = "Baptiste Brument" }
+]
+keywords = ["alicevision", "meshroom", "photogrammetry", "3d-reconstruction", "sfm", "mesh-evaluation"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Scientific/Engineering :: Image Processing",
+    "Topic :: Scientific/Engineering :: Visualization",
+]
+requires-python = ">=3.9"
+dependencies = [
+    "numpy>=1.20",
+    "scipy>=1.7",
+    "trimesh>=3.0",
+    "open3d>=0.15",
+    "scikit-learn>=1.0",
+    "matplotlib>=3.5",
+    "tqdm>=4.0",
+    "opencv-python>=4.0",
+    "scikit-image>=0.19",
+    "pyembree>=0.1.6",
+]
+
+[project.optional-dependencies]
+pyalicevision = [
+    # pyalicevision is not on PyPI - see README for installation instructions
+]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "ruff>=0.1",
+    "mypy>=1.0",
+]
+all = [
+    "pyalicevisionlib[dev]",
+]
+
+[project.scripts]
+pyav-visualize = "pyalicevisionlib.scripts.visualize:main"
+pyav-evaluate = "pyalicevisionlib.scripts.evaluate:main"
+pyav-rc2sfm = "pyalicevisionlib.scripts.rc_to_sfmdata:main"
+pyav-transform = "pyalicevisionlib.scripts.transform:main"
+pyav-contours = "pyalicevisionlib.scripts.contours:main"
+
+[project.urls]
+Homepage = "https://github.com/bbrument/pyalicevisionlib"
+Repository = "https://github.com/bbrument/pyalicevisionlib"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pyalicevisionlib"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.9"
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true
