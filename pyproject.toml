@@ -57,6 +57,8 @@ pyav-visualize = "pyalicevisionlib.scripts.visualize:main"
 pyav-evaluate = "pyalicevisionlib.scripts.evaluate:main"
 pyav-rc2sfm = "pyalicevisionlib.scripts.rc_to_sfmdata:main"
 pyav-sfm2rc = "pyalicevisionlib.scripts.sfmdata_to_rc:main"
+pyav-idr2sfm = "pyalicevisionlib.scripts.idr_to_sfmdata:main"
+pyav-sfm2idr = "pyalicevisionlib.scripts.sfmdata_to_idr:main"
 pyav-transform = "pyalicevisionlib.scripts.transform:main"
 pyav-contours = "pyalicevisionlib.scripts.contours:main"
 
