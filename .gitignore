@@ -50,3 +50,14 @@ htmlcov/
 test_*.py
 debug_*.py
 scratch_*.py
+
+# .github/
+#         _bmad-output/
+#         _bmad/
+#         docs/index.md
+#         docs/project-scan-report.json
+
+# Ignore all files in the _bmad-output directory
+_bmad-output/
+_bmad/
+docs/project-scan-report.json
