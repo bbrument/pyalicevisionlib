@@ -57,6 +57,21 @@ def parse_xmp_file(xmp_path: str) -> Dict:
             data['position'] = [float(x) for x in child.text.strip().split()]
         elif tag == 'DistortionCoeficients':
             data['distortion_coefficients'] = [float(x) for x in child.text.strip().split()]
+
+    # Fallback: check attributes for fields that may not be child elements
+    if 'rotation' not in data:
+        rot_attr = desc.get(f'{xcr_ns}Rotation')
+        if rot_attr:
+            data['rotation'] = [float(x) for x in rot_attr.strip().split()]
+    if 'position' not in data:
+        pos_attr = desc.get(f'{xcr_ns}Position')
+        if pos_attr:
+            data['position'] = [float(x) for x in pos_attr.strip().split()]
+    if 'distortion_coefficients' not in data:
+        dist_attr = desc.get(f'{xcr_ns}DistortionCoeficients')
+        if dist_attr:
+            data['distortion_coefficients'] = [float(x) for x in dist_attr.strip().split()]
+
     return data
 
 
