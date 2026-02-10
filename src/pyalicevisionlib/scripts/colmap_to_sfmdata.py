@@ -29,7 +29,7 @@ from typing import Dict, List, Optional
 
 import numpy as np
 
-from ..sfmdata import SfMDataWrapper, load_sfmdata
+from ..sfmdata import SfMDataWrapper, load_sfmdata, load_sfmdata_json
 
 logger = logging.getLogger(__name__)
 
@@ -214,7 +214,11 @@ def convert_colmap_to_sfmdata(
     ref_camera_model = "Unknown"
 
     if reference_sfmdata:
-        ref_sfm = load_sfmdata(reference_sfmdata)
+        try:
+            ref_sfm = load_sfmdata(reference_sfmdata)
+        except ImportError:
+            # .sfm file that is actually JSON (Meshroom cameraInit.sfm)
+            ref_sfm = SfMDataWrapper.from_dict(load_sfmdata_json(reference_sfmdata))
         ref_viewid_map = ref_sfm.get_viewid_by_image_name()
         logger.info("Loaded %d viewIds from reference SfMData", len(ref_viewid_map))
 

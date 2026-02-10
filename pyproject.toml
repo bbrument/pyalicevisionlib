@@ -63,6 +63,8 @@ pyav-transform = "pyalicevisionlib.scripts.transform:main"
 pyav-contours = "pyalicevisionlib.scripts.contours:main"
 pyav-colmap2sfm = "pyalicevisionlib.scripts.colmap_to_sfmdata:main"
 pyav-sfm2colmap = "pyalicevisionlib.scripts.sfmdata_to_colmap:main"
+pyav-metashape2sfm = "pyalicevisionlib.scripts.metashape_to_sfmdata:main"
+pyav-sfm2metashape = "pyalicevisionlib.scripts.sfmdata_to_metashape:main"
 
 [project.urls]
 Homepage = "https://github.com/bbrument/pyalicevisionlib"
