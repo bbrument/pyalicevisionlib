@@ -12,37 +12,55 @@ try:
 except ImportError:
     HAS_TRIMESH = False
 
+# Optional open3d import
+try:
+    import open3d as o3d
+    HAS_OPEN3D = True
+except ImportError:
+    HAS_OPEN3D = False
+
 
 def load_mesh(filepath: str) -> 'trimesh.Trimesh':
     """
-    Load a mesh file using trimesh.
-    
+    Load a mesh file using trimesh, with open3d fallback.
+
     Handles both single meshes and scenes with multiple geometries.
-    
+
     Args:
         filepath: Path to mesh file (PLY, OBJ, STL, GLTF, etc.)
-        
+
     Returns:
         trimesh.Trimesh object
-        
+
     Raises:
-        ImportError: If trimesh is not installed
+        ImportError: If neither trimesh nor open3d is installed
         ValueError: If no valid mesh geometry found
     """
-    if not HAS_TRIMESH:
-        raise ImportError("trimesh is required for mesh loading. Install with: pip install trimesh")
-    
-    mesh = trimesh.load(filepath)
-    
-    # Handle scenes with multiple meshes
-    if isinstance(mesh, trimesh.Scene):
-        meshes = [g for g in mesh.geometry.values() if isinstance(g, trimesh.Trimesh)]
-        if meshes:
-            mesh = trimesh.util.concatenate(meshes)
-        else:
-            raise ValueError(f"No valid mesh geometry found in {filepath}")
-    
-    return mesh
+    if not HAS_TRIMESH and not HAS_OPEN3D:
+        raise ImportError("trimesh or open3d is required for mesh loading.")
+
+    if HAS_TRIMESH:
+        try:
+            mesh = trimesh.load(filepath)
+            if isinstance(mesh, trimesh.Scene):
+                meshes = [g for g in mesh.geometry.values() if isinstance(g, trimesh.Trimesh)]
+                if meshes:
+                    mesh = trimesh.util.concatenate(meshes)
+                else:
+                    raise ValueError(f"No valid mesh geometry found in {filepath}")
+            return mesh
+        except (ValueError, Exception) as e:
+            if not HAS_OPEN3D:
+                raise
+            print(f"trimesh failed ({e}), falling back to open3d")
+
+    # Open3d fallback
+    o3d_mesh = o3d.io.read_triangle_mesh(filepath)
+    vertices = np.asarray(o3d_mesh.vertices)
+    faces = np.asarray(o3d_mesh.triangles)
+    if len(vertices) == 0:
+        raise ValueError(f"No valid mesh geometry found in {filepath}")
+    return trimesh.Trimesh(vertices=vertices, faces=faces) if HAS_TRIMESH else o3d_mesh
 
 
 def sample_mesh_points(
