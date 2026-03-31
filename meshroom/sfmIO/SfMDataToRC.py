@@ -1,7 +1,3 @@
-"""
-Meshroom node for converting AliceVision SfMData to RealityCapture XMP camera files.
-"""
-
 from meshroom.core import desc
 
 

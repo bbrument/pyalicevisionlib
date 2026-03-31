@@ -1,7 +1,3 @@
-"""
-Meshroom node for converting AliceVision SfMData to Agisoft Metashape XML.
-"""
-
 from meshroom.core import desc
 
 
