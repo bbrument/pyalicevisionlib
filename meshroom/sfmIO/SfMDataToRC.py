@@ -4,8 +4,6 @@ Meshroom node for converting AliceVision SfMData to RealityCapture XMP camera fi
 
 from meshroom.core import desc
 
-from pyalicevisionlib.scripts.sfmdata_to_rc import convert_sfmdata_to_rc
-
 
 class SfMDataToRC(desc.Node):
     """Convert AliceVision SfMData to RealityCapture XMP camera files.
@@ -68,6 +66,8 @@ class SfMDataToRC(desc.Node):
     ]
 
     def process(self, node):
+        from pyalicevisionlib.scripts.sfmdata_to_rc import convert_sfmdata_to_rc
+
         convert_sfmdata_to_rc(
             sfmdata_path=node.input.value,
             output_folder=node.output.value,

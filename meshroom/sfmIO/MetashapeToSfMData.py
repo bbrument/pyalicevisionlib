@@ -4,8 +4,6 @@ Meshroom node for converting Agisoft Metashape XML to AliceVision SfMData.
 
 from meshroom.core import desc
 
-from pyalicevisionlib.scripts.metashape_to_sfmdata import convert_metashape_to_sfmdata
-
 
 class MetashapeToSfMData(desc.Node):
     """Convert Agisoft Metashape XML to AliceVision SfMData.
@@ -75,6 +73,8 @@ class MetashapeToSfMData(desc.Node):
     ]
 
     def process(self, node):
+        from pyalicevisionlib.scripts.metashape_to_sfmdata import convert_metashape_to_sfmdata
+
         images_folder = node.imagesFolder.value if node.imagesFolder.value else None
         reference = node.referenceSfmData.value if node.referenceSfmData.value else None
 
