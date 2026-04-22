@@ -46,10 +46,10 @@ htmlcov/
 *.sfm
 *.abc
 
-# Debug/temporary scripts
-test_*.py
-debug_*.py
-scratch_*.py
+# Debug/temporary scripts (root only, not tests/)
+/test_*.py
+/debug_*.py
+/scratch_*.py
 
 # Ignore all files in the _bmad-output directory
 _bmad-output/

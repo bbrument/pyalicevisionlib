@@ -61,6 +61,9 @@ from .evaluation import (
     cleanup_mesh_with_masks,
     run_evaluation,
 )
+from .rendering import (
+    render_normal_map,
+)
 from .image import (
     load_image,
     load_gray,
@@ -114,6 +117,8 @@ __all__ = [
     "save_image",
     "get_image_dimensions",
     "get_available_backends",
+    # Rendering
+    "render_normal_map",
     # Evaluation
     "ChamferResult",
     "PrecisionRecallResult",
