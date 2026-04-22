@@ -33,6 +33,29 @@ except ImportError:
     HAS_PIL = False
 
 
+def linear_to_srgb(img: np.ndarray) -> np.ndarray:
+    """
+    Convert linear-light float image to sRGB space (matching AliceVision/OCIO behavior).
+
+    Uses the standard IEC 61966-2-1 sRGB transfer function:
+      - linear <= 0.0031308 : srgb = 12.92 * linear
+      - linear > 0.0031308  : srgb = 1.055 * linear^(1/2.4) - 0.055
+
+    Args:
+        img: Float image in linear space (values may exceed [0, 1])
+
+    Returns:
+        Float image in sRGB space, clamped to [0, 1]
+    """
+    img = np.clip(img, 0, None).astype(np.float32)
+    srgb = np.where(
+        img <= 0.0031308,
+        12.92 * img,
+        1.055 * np.power(img, 1.0 / 2.4) - 0.055,
+    )
+    return np.clip(srgb, 0.0, 1.0)
+
+
 def load_image(
     image_path: Union[str, Path],
     mode: str = 'rgb',
@@ -104,12 +127,10 @@ def _load_with_oiio(path: Path, mode: str) -> Optional[np.ndarray]:
         pixels = img_buf.get_pixels(oiio.TypeFloat)
         img = np.array(pixels, dtype=np.float32).reshape(h, w, c)
         
-        # Handle HDR/EXR normalization
-        if img.max() > 1.0 or path.suffix.upper() in ('.EXR', '.HDR'):
-            percentile_99 = np.percentile(img, 99.5)
-            if percentile_99 > 0:
-                img = img / percentile_99
-            img = np.clip(img, 0, 1)
+        # EXR/HDR images are in linear light — apply sRGB transfer curve
+        # (matches AliceVision ImageProcessing linear→sRGB conversion via OCIO)
+        if path.suffix.upper() in ('.EXR', '.HDR'):
+            img = linear_to_srgb(img)
         
         # Convert to requested mode
         if mode == 'gray':
@@ -144,28 +165,41 @@ def _load_with_cv2(path: Path, mode: str) -> Optional[np.ndarray]:
         flags = cv2.IMREAD_UNCHANGED if mode in ('unchanged', 'rgba') else cv2.IMREAD_COLOR
         if mode == 'gray':
             flags = cv2.IMREAD_GRAYSCALE
-        
+
+        # For EXR/HDR, always load as float with full depth
+        is_hdr = path.suffix.upper() in ('.EXR', '.HDR')
+        if is_hdr:
+            flags = cv2.IMREAD_ANYCOLOR | cv2.IMREAD_ANYDEPTH
+
         img = cv2.imread(str(path), flags)
         if img is None:
             return None
-        
+
+        # EXR/HDR: apply sRGB transfer curve (linear → sRGB)
+        if is_hdr and (img.dtype == np.float32 or img.dtype == np.float64):
+            img = linear_to_srgb(img)
+
         # Convert BGR to RGB
         if img.ndim == 3:
             if img.shape[2] == 3:
                 img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
             elif img.shape[2] == 4:
                 img = cv2.cvtColor(img, cv2.COLOR_BGRA2RGBA)
-        
+
         # Handle mode conversions
-        if mode == 'rgb' and img.ndim == 3 and img.shape[2] == 4:
+        if mode == 'gray':
+            if img.ndim == 3:
+                if img.shape[2] >= 3:
+                    img = 0.299 * img[:, :, 0] + 0.587 * img[:, :, 1] + 0.114 * img[:, :, 2]
+                else:
+                    img = img[:, :, 0]
+        elif mode == 'rgb' and img.ndim == 3 and img.shape[2] == 4:
             img = img[:, :, :3]
         elif mode == 'rgba' and img.ndim == 3 and img.shape[2] == 3:
             h, w = img.shape[:2]
             alpha = np.full((h, w, 1), 255, dtype=img.dtype)
             img = np.concatenate([img, alpha], axis=-1)
-        elif mode == 'gray' and img.ndim == 3:
-            img = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
-        
+
         return img
     except Exception:
         return None

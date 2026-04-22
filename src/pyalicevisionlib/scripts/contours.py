@@ -16,6 +16,7 @@ Usage:
 """
 
 import argparse
+import concurrent.futures
 import copy
 import cv2
 import json
@@ -94,6 +95,70 @@ def filter_connected_components(mask: np.ndarray, mode: str = 'hybrid') -> np.nd
     return mask
 
 
+def _canny_large_kernel(
+    image: np.ndarray,
+    low: float,
+    high: float,
+    ksize: int
+) -> np.ndarray:
+    """Manual Canny with arbitrary Sobel kernel size (supports ksize > 7).
+
+    Steps: Sobel gradients → magnitude + angle → non-max suppression → hysteresis.
+    """
+    # Sobel gradients (cv2.Sobel supports ksize up to 31)
+    gx = cv2.Sobel(image, cv2.CV_64F, 1, 0, ksize=ksize)
+    gy = cv2.Sobel(image, cv2.CV_64F, 0, 1, ksize=ksize)
+    mag = np.sqrt(gx * gx + gy * gy)
+    angle = np.arctan2(gy, gx) * 180.0 / np.pi
+
+    # Normalize magnitude to 0-255 for thresholding
+    mag_max = mag.max()
+    if mag_max > 0:
+        mag_norm = (mag / mag_max * 255).astype(np.uint8)
+    else:
+        return np.zeros_like(image)
+
+    # Non-maximum suppression (vectorized)
+    h, w = mag_norm.shape
+    angle_q = ((angle % 180) / 45).astype(int) % 4  # 0,1,2,3
+
+    # Pad to handle borders
+    pad = np.pad(mag_norm, 1, mode='constant')
+    # Neighbor pairs for each direction
+    n1 = np.zeros_like(mag_norm, dtype=np.uint8)
+    n2 = np.zeros_like(mag_norm, dtype=np.uint8)
+
+    m0 = angle_q == 0  # horizontal
+    m1 = angle_q == 1  # diagonal /
+    m2 = angle_q == 2  # vertical
+    m3 = angle_q == 3  # diagonal \
+
+    n1[m0] = pad[1:-1, :-2][m0];  n2[m0] = pad[1:-1, 2:][m0]
+    n1[m1] = pad[:-2, 2:][m1];    n2[m1] = pad[2:, :-2][m1]
+    n1[m2] = pad[:-2, 1:-1][m2];  n2[m2] = pad[2:, 1:-1][m2]
+    n1[m3] = pad[:-2, :-2][m3];   n2[m3] = pad[2:, 2:][m3]
+
+    nms = np.where((mag_norm >= n1) & (mag_norm >= n2), mag_norm, 0).astype(np.uint8)
+
+    # Hysteresis thresholding
+    strong = nms >= high
+    weak = (nms >= low) & (~strong)
+
+    edges = np.zeros_like(nms)
+    edges[strong] = 255
+
+    # Connect weak edges adjacent to strong
+    for _ in range(3):
+        dilated_strong = cv2.dilate(edges, np.ones((3, 3), np.uint8))
+        new_edges = weak & (dilated_strong > 0)
+        if not new_edges.any():
+            break
+        edges[new_edges] = 255
+        weak[new_edges] = False
+
+    return edges
+
+
 def extract_canny_contours(
     image_gray: np.ndarray,
     mask: np.ndarray,
@@ -104,15 +169,15 @@ def extract_canny_contours(
 ) -> np.ndarray:
     """
     Extract Canny contours within a margin around the mask.
-    
+
     Args:
         image_gray: Grayscale image
         mask: Binary mask (object region)
         margin_size: Margin width in pixels
         canny_low: Canny low threshold
         canny_high: Canny high threshold
-        sobel_kernel: Sobel kernel size (3, 5, or 7)
-    
+        sobel_kernel: Sobel kernel size (3, 5, 7, or larger odd values)
+
     Returns:
         Binary image with Canny edges within the margin
     """
@@ -121,22 +186,50 @@ def extract_canny_contours(
     dilated = cv2.dilate(mask, kernel, iterations=1)
     eroded = cv2.erode(mask, kernel, iterations=1)
     margin = cv2.subtract(dilated, eroded)
-    
-    # Apply Canny on full image
-    edges = cv2.Canny(image_gray, canny_low, canny_high, apertureSize=sobel_kernel)
-    
+
+    # Apply Canny
+    if sobel_kernel <= 7:
+        edges = cv2.Canny(image_gray, canny_low, canny_high, apertureSize=sobel_kernel)
+    else:
+        edges = _canny_large_kernel(image_gray, canny_low, canny_high, sobel_kernel)
+
     # Keep only edges within margin
     contours = cv2.bitwise_and(edges, margin)
     return contours
 
 
+def _load_gray_cv2(image_path: str) -> np.ndarray:
+    """Load image as 8-bit grayscale using cv2 only (avoids OIIO hangs in workers)."""
+    from ..image import linear_to_srgb
+    img = cv2.imread(image_path, cv2.IMREAD_ANYCOLOR | cv2.IMREAD_ANYDEPTH)
+    if img is None:
+        raise RuntimeError(f"Failed to load image: {image_path}")
+    # EXR/HDR: apply sRGB transfer curve
+    is_hdr = image_path.lower().endswith(('.exr', '.hdr'))
+    if is_hdr and (img.dtype == np.float32 or img.dtype == np.float64):
+        img = linear_to_srgb(img)
+    # Convert to grayscale
+    if img.ndim == 3:
+        # cv2 loads as BGR — use standard luminance weights
+        if img.shape[2] >= 3:
+            img = 0.114 * img[:, :, 0] + 0.587 * img[:, :, 1] + 0.299 * img[:, :, 2]
+        else:
+            img = img[:, :, 0]
+    # Convert to uint8
+    if img.dtype in (np.float32, np.float64):
+        img = np.clip(img * 255, 0, 255).astype(np.uint8)
+    elif img.dtype == np.uint16:
+        img = (img / 256).astype(np.uint8)
+    return img
+
+
 def process_single_image(args: Tuple) -> Dict:
     """Worker function for processing a single image."""
     view_id, image_path, mask_path, config = args
-    
+
     try:
-        # Load grayscale image
-        gray = load_image_gray(image_path)
+        # Load grayscale image (use cv2 directly to avoid OIIO hangs in workers)
+        gray = _load_gray_cv2(image_path)
         
         # Load mask
         if config['use_alpha']:
@@ -148,7 +241,12 @@ def process_single_image(args: Tuple) -> Dict:
         
         # Filter connected components
         mask = filter_connected_components(mask, mode=config['component_mode'])
-        
+
+        # Save filtered mask if requested
+        if config.get('save_masks_folder'):
+            mask_out_file = config['save_masks_folder'] / f"{view_id}.png"
+            cv2.imwrite(str(mask_out_file), mask)
+
         # Extract contours
         contours = extract_canny_contours(
             gray, mask,
@@ -179,7 +277,9 @@ def process_contours(
     sobel_kernel: int = 3,
     component_mode: str = 'hybrid',
     num_workers: Optional[int] = None,
-    force: bool = False
+    force: bool = False,
+    image_filter: Optional[str] = None,
+    save_masks_folder: Optional[str] = None,
 ):
     """
     Process all images and generate Canny contours.
@@ -196,15 +296,31 @@ def process_contours(
         component_mode: Connected component filtering mode
         num_workers: Number of parallel workers
         force: Regenerate existing outputs
+        image_filter: Only process views whose filename contains this substring
+                      (e.g. 'mvps_' for MVPS images, 'DSC' for MVS images)
+        save_masks_folder: If set, save the filtered mask PNGs to this folder
     """
     output_path = Path(output_folder)
     output_path.mkdir(parents=True, exist_ok=True)
     masks_path = Path(masks_folder) if masks_folder else None
-    
+
+    if save_masks_folder:
+        save_masks_path = Path(save_masks_folder)
+        save_masks_path.mkdir(parents=True, exist_ok=True)
+    else:
+        save_masks_path = None
+
     # Load SfMData
     sfm = load_sfmdata(sfm_path)
     view_mapping = sfm.get_viewid_to_image_path()
     print(f"Found {len(view_mapping)} views in SfMData")
+
+    # Filter views by image type if requested
+    if image_filter:
+        filtered = {vid: p for vid, p in view_mapping.items()
+                    if image_filter in Path(p).name}
+        print(f"Filtered to {len(filtered)} views matching '{image_filter}'")
+        view_mapping = filtered
     
     # Find mask files
     mask_files = {}
@@ -222,7 +338,8 @@ def process_contours(
         'canny_high': canny_high,
         'sobel_kernel': sobel_kernel,
         'component_mode': component_mode,
-        'output_folder': output_path
+        'output_folder': output_path,
+        'save_masks_folder': save_masks_path,
     }
     
     # Prepare tasks
@@ -231,13 +348,17 @@ def process_contours(
         if not Path(image_path).exists():
             print(f"  Warning: Image not found: {image_path}")
             continue
-        
-        # Find corresponding mask
+
+        # Find corresponding mask: try viewId first, then original filename stem
         if view_id in mask_files:
             mask_path = mask_files[view_id]
         else:
-            print(f"  Warning: No mask for view {view_id}")
-            continue
+            image_stem = Path(image_path).stem
+            if image_stem in mask_files:
+                mask_path = mask_files[image_stem]
+            else:
+                print(f"  Warning: No mask for view {view_id} (tried {image_stem})")
+                continue
         
         # Check if output exists
         output_file = output_path / f"{view_id}.png"
@@ -254,15 +375,18 @@ def process_contours(
     workers = num_workers or max(1, multiprocessing.cpu_count() - 1)
     print(f"Processing {len(tasks)} images with {workers} workers...")
     
-    # Process in parallel
+    # Process in parallel using threads (cv2 releases the GIL)
     stats = {'success': 0, 'skipped': 0, 'error': 0}
-    
-    with multiprocessing.Pool(processes=workers) as pool:
-        results = list(tqdm(
-            pool.imap(process_single_image, tasks),
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
+        futures = [executor.submit(process_single_image, task) for task in tasks]
+        results = []
+        for future in tqdm(
+            concurrent.futures.as_completed(futures),
             total=len(tasks),
             desc="Extracting contours"
-        ))
+        ):
+            results.append(future.result())
     
     # Collect results and build output mapping
     contours_mapping = {}
@@ -370,7 +494,7 @@ Examples:
                        help='Canny low threshold (default: 50)')
     parser.add_argument('--canny-high', type=int, default=150,
                        help='Canny high threshold (default: 150)')
-    parser.add_argument('--sobel-kernel', type=int, default=3, choices=[3, 5, 7],
+    parser.add_argument('--sobel-kernel', type=int, default=3,
                        help='Sobel kernel size (default: 3)')
     parser.add_argument('--component-mode', default='hybrid',
                        choices=['center_point', 'smallest_area', 'hybrid'],
@@ -379,9 +503,14 @@ Examples:
                        help='Number of parallel workers')
     parser.add_argument('--force', action='store_true',
                        help='Regenerate existing outputs')
-    
+    parser.add_argument('--image-filter', type=str, default=None,
+                       help='Only process views whose filename contains this substring '
+                            '(e.g. "mvps_" for MVPS, "DSC" for MVS)')
+    parser.add_argument('--save-masks', type=str, default=None,
+                       help='Save filtered mask PNGs to this folder')
+
     args = parser.parse_args()
-    
+
     process_contours(
         sfm_path=args.sfm,
         masks_folder=args.masks,
@@ -393,7 +522,9 @@ Examples:
         sobel_kernel=args.sobel_kernel,
         component_mode=args.component_mode,
         num_workers=args.num_workers,
-        force=args.force
+        force=args.force,
+        image_filter=args.image_filter,
+        save_masks_folder=args.save_masks,
     )
 
 

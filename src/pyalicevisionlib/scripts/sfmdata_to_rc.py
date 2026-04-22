@@ -65,17 +65,17 @@ XMP_TEMPLATE = '''<x:xmpmeta xmlns:x="adobe:ns:meta/">
 def av_rotation_to_rc(av_rotation: np.ndarray) -> List[float]:
     """
     Convert AV rotation (cam2world) to RC rotation (world2cam).
-    
+
     Inverse of rc_rotation_to_av:
     - In rc_to_sfmdata: R_corrected = WORLD_CORRECTION @ R.T
     - Inverse: R_original = (WORLD_CORRECTION @ R_corrected).T
-    
+
     Since WORLD_CORRECTION is symmetric (diagonal with 1, -1, -1):
         WORLD_CORRECTION^-1 = WORLD_CORRECTION
-    
+
     Args:
         av_rotation: 3x3 cam2world rotation matrix from AV (already corrected)
-        
+
     Returns:
         List of 9 floats for RC world2cam rotation (row-major)
     """
@@ -89,14 +89,14 @@ def av_rotation_to_rc(av_rotation: np.ndarray) -> List[float]:
 def av_position_to_rc(av_center: np.ndarray) -> List[float]:
     """
     Convert AV center to RC position.
-    
+
     Inverse of rc_position_to_av:
     - In rc_to_sfmdata: center_corrected = WORLD_CORRECTION @ center
     - Inverse: center_original = WORLD_CORRECTION @ center_corrected
-    
+
     Args:
         av_center: Camera center from AV (already corrected)
-        
+
     Returns:
         List of 3 floats for RC position
     """
