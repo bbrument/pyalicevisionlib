@@ -1,0 +1,99 @@
+from meshroom.core import desc
+
+
+class RCToSfMData(desc.Node):
+    """Convert RealityCapture XMP camera files to AliceVision SfMData.
+
+    Reads a folder of RealityCapture XMP files (one per image) and a folder of
+    the corresponding images, then produces an AliceVision SfMData JSON file
+    that can be used directly in a Meshroom pipeline.
+
+    Coordinate conventions are handled automatically:
+    - RC rotation (world2cam, row-major) is converted to AV rotation (cam2world).
+    - RC principal point (normalised by max dimension) is converted to AV pixel offset.
+    - World coordinate axes are corrected to match AliceVision/Meshroom conventions.
+    """
+
+    category = "SfmIO"
+
+    inputs = [
+        desc.File(
+            name="xmpFolder",
+            label="XMP Folder",
+            description="Folder containing RealityCapture XMP files (one per image).",
+            value="",
+        ),
+        desc.File(
+            name="imagesFolder",
+            label="Images Folder",
+            description="Folder containing the source images referenced by the XMP files.",
+            value="",
+        ),
+        desc.File(
+            name="referenceSfmData",
+            label="Reference SfMData",
+            description=(
+                "Optional path to a reference SfMData file. "
+                "When provided, view IDs are matched by image name instead of being generated."
+            ),
+            value="",
+        ),
+        desc.FloatParam(
+            name="sensorWidth",
+            label="Sensor Width (mm)",
+            description="Physical sensor width in millimetres used to convert the 35 mm-equivalent focal length.",
+            value=36.0,
+            range=(1.0, 100.0, 0.1),
+        ),
+        desc.FloatParam(
+            name="sensorHeight",
+            label="Sensor Height (mm)",
+            description="Physical sensor height in millimetres.",
+            value=24.0,
+            range=(1.0, 100.0, 0.1),
+        ),
+        desc.StringParam(
+            name="cameraMake",
+            label="Camera Make",
+            description="Camera manufacturer name stored in the output SfMData metadata.",
+            value="Unknown",
+        ),
+        desc.StringParam(
+            name="cameraModel",
+            label="Camera Model",
+            description="Camera model name stored in the output SfMData metadata.",
+            value="Unknown",
+        ),
+        desc.StringParam(
+            name="serialNumber",
+            label="Serial Number",
+            description="Camera serial number used to group views into intrinsic groups.",
+            value="0",
+        ),
+    ]
+
+    outputs = [
+        desc.File(
+            name="output",
+            label="SfMData",
+            description="Path to the output AliceVision SfMData JSON file.",
+            value="{nodeCacheFolder}/sfmData.json",
+        ),
+    ]
+
+    def process(self, node):
+        from pyalicevisionlib.scripts.rc_to_sfmdata import convert_rc_to_sfmdata
+
+        reference = node.referenceSfmData.value if node.referenceSfmData.value else None
+
+        convert_rc_to_sfmdata(
+            xmp_folder=node.xmpFolder.value,
+            images_folder=node.imagesFolder.value,
+            output_path=node.output.value,
+            sensor_width=node.sensorWidth.value,
+            sensor_height=node.sensorHeight.value,
+            camera_make=node.cameraMake.value,
+            camera_model=node.cameraModel.value,
+            serial_number=node.serialNumber.value,
+            reference_sfmdata=reference,
+        )
