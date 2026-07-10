@@ -13,6 +13,9 @@ class SfMDataToRC(desc.Node):
     - AV rotation (cam2world) is converted to RC rotation (world2cam, row-major).
     - AV principal point (pixel offset) is converted to RC normalised value.
     - World coordinate axes are corrected to match RealityCapture conventions.
+
+    If the SfMData contains landmarks (structure), they are exported as a PLY
+    point cloud next to the XMP files, in the same coordinate frame.
     """
 
     category = "SfmIO"
@@ -37,6 +40,15 @@ class SfMDataToRC(desc.Node):
             name="copyImages",
             label="Copy Images",
             description="Copy the source images into the output folder next to the XMP files.",
+            value=True,
+        ),
+        desc.BoolParam(
+            name="exportPointCloud",
+            label="Export Point Cloud",
+            description=(
+                "Export the SfMData landmarks (structure) as a PLY point cloud next to the XMP files, "
+                "in the same coordinate frame as the XMP camera positions."
+            ),
             value=True,
         ),
         desc.FloatParam(
@@ -70,4 +82,5 @@ class SfMDataToRC(desc.Node):
             images_folder_name=node.imagesFolderName.value,
             copy_images=node.copyImages.value,
             sensor_width=node.sensorWidth.value,
+            export_point_cloud=node.exportPointCloud.value,
         )

@@ -12,6 +12,9 @@ class RCToSfMData(desc.Node):
     - RC rotation (world2cam, row-major) is converted to AV rotation (cam2world).
     - RC principal point (normalised by max dimension) is converted to AV pixel offset.
     - World coordinate axes are corrected to match AliceVision/Meshroom conventions.
+
+    A point cloud exported from RealityCapture (with the 'Same as XMP' coordinate
+    system) can optionally be imported as landmarks in the output SfMData.
     """
 
     category = "SfmIO"
@@ -27,6 +30,16 @@ class RCToSfMData(desc.Node):
             name="imagesFolder",
             label="Images Folder",
             description="Folder containing the source images referenced by the XMP files.",
+            value="",
+        ),
+        desc.File(
+            name="pointCloud",
+            label="Point Cloud",
+            description=(
+                "Optional point cloud file exported from RealityCapture (.ply, .xyz, .txt, .csv, .pts). "
+                "Export it with the 'Same as XMP' coordinate system so it shares the XMP world frame. "
+                "The points are imported as landmarks (structure) in the output SfMData."
+            ),
             value="",
         ),
         desc.File(
@@ -85,6 +98,7 @@ class RCToSfMData(desc.Node):
         from pyalicevisionlib.scripts.rc_to_sfmdata import convert_rc_to_sfmdata
 
         reference = node.referenceSfmData.value if node.referenceSfmData.value else None
+        point_cloud = node.pointCloud.value if node.pointCloud.value else None
 
         convert_rc_to_sfmdata(
             xmp_folder=node.xmpFolder.value,
@@ -96,4 +110,5 @@ class RCToSfMData(desc.Node):
             camera_model=node.cameraModel.value,
             serial_number=node.serialNumber.value,
             reference_sfmdata=reference,
+            point_cloud=point_cloud,
         )

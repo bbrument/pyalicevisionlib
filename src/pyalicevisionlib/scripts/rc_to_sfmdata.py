@@ -27,6 +27,7 @@ import numpy as np
 
 from ..sfmdata import load_sfmdata, SfMDataWrapper, WORLD_CORRECTION
 from ..image import get_image_dimensions
+from ..pointcloud import load_point_cloud, rc_points_to_av, landmarks_from_points
 
 
 def parse_xmp_file(xmp_path: str) -> Dict:
@@ -164,10 +165,11 @@ def convert_rc_to_sfmdata(
     camera_make: str = "Unknown",
     camera_model: str = "Unknown",
     serial_number: str = "0",
-    reference_sfmdata: Optional[str] = None
+    reference_sfmdata: Optional[str] = None,
+    point_cloud: Optional[str] = None
 ) -> Dict:
     """Convert RealityCapture XMP files to AliceVision SfMData.
-    
+
     Args:
         xmp_folder: Folder containing XMP files
         images_folder: Folder containing images
@@ -178,6 +180,10 @@ def convert_rc_to_sfmdata(
         camera_model: Camera model string
         serial_number: Camera serial number
         reference_sfmdata: Optional reference SfMData to match viewIds by image name
+        point_cloud: Optional point cloud file exported from RealityCapture
+            (.ply, .xyz, .txt, .csv, .pts). Must be exported with the
+            "Same as XMP" coordinate system so it shares the XMP world frame.
+            Imported as SfMData landmarks (structure section).
     """
     xmp_folder = Path(xmp_folder)
     images_folder = Path(images_folder)
@@ -286,20 +292,29 @@ def convert_rc_to_sfmdata(
                 }
             })
     
+    structure = []
+    if point_cloud:
+        points_rc, colors = load_point_cloud(point_cloud)
+        points_av = rc_points_to_av(points_rc)
+        structure = landmarks_from_points(points_av, colors)
+        print(f"Imported {len(structure)} points from {point_cloud}")
+
     sfmdata = {
         'version': ['1', '2', '13'],
         'featuresFolders': [],
         'matchesFolders': [],
         'views': views,
         'intrinsics': list(intrinsics_dict.values()),
-        'poses': poses
+        'poses': poses,
+        'structure': structure
     }
-    
+
     # Use wrapper to save - this normalizes the structure via pyalicevision
     wrapper = SfMDataWrapper.from_dict(sfmdata)
     wrapper.save(output_path)
-    
-    print(f"Wrote {output_path}: {len(views)} views, {len(poses)} poses")
+
+    print(f"Wrote {output_path}: {len(views)} views, {len(poses)} poses, "
+          f"{len(structure)} landmarks")
     return sfmdata
 
 
@@ -312,12 +327,18 @@ Examples:
   pyav-rc2sfm ./xmp_files ./images output.json
   pyav-rc2sfm ./xmp_files ./images output.json --sensor-width 23.5
   pyav-rc2sfm ./xmp_files ./images output.json --reference /path/to/ref_sfmdata.json
+  pyav-rc2sfm ./xmp_files ./images output.json --point-cloud cloud.ply
         """
     )
     parser.add_argument('xmp_folder', help='Folder with XMP files')
     parser.add_argument('images_folder', help='Folder with images')
     parser.add_argument('output', help='Output SfMData JSON')
     parser.add_argument('--reference', '-r', help='Reference SfMData to match viewIds by image name')
+    parser.add_argument(
+        '--point-cloud', '-p',
+        help='Point cloud exported from RealityCapture (.ply, .xyz, ...) '
+             'in the "Same as XMP" coordinate system; imported as SfMData landmarks'
+    )
     parser.add_argument('--sensor-width', type=float, default=36.0, help='Sensor width mm')
     parser.add_argument('--sensor-height', type=float, default=24.0, help='Sensor height mm')
     parser.add_argument('--camera-make', default='Unknown', help='Camera make')
@@ -335,7 +356,8 @@ Examples:
         args.camera_make,
         args.camera_model,
         args.serial_number,
-        args.reference
+        args.reference,
+        args.point_cloud
     )
 
 

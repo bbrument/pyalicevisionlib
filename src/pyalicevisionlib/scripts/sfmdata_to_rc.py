@@ -25,6 +25,7 @@ from typing import Dict, List, Optional, Tuple
 import numpy as np
 
 from ..sfmdata import SfMDataWrapper, WORLD_CORRECTION
+from ..pointcloud import av_points_to_rc, points_from_landmarks, save_point_cloud_ply
 
 
 # =============================================================================
@@ -240,11 +241,13 @@ def convert_sfmdata_to_rc(
     output_folder: str,
     images_folder_name: str = "images",
     copy_images: bool = True,
-    sensor_width: float = 36.0
+    sensor_width: float = 36.0,
+    export_point_cloud: bool = True,
+    point_cloud_filename: str = "point_cloud.ply"
 ) -> Dict:
     """
     Convert AliceVision SfMData to RealityCapture XMP files.
-    
+
     Creates:
     - output_folder/
       - <images_folder_name>/     # Copied images (if copy_images=True)
@@ -254,16 +257,23 @@ def convert_sfmdata_to_rc(
       - image1.xmp
       - image2.xmp
       - ...
-    
+      - point_cloud.ply           # SfMData landmarks (if present and enabled)
+
     The XMP files contain paths pointing to images in the images folder.
-    
+    The point cloud is written in the same (XMP) coordinate frame as the
+    camera positions, so it can be imported into RealityCapture alongside
+    the registered images.
+
     Args:
         sfmdata_path: Path to input SfMData file (.json, .sfm, .abc)
         output_folder: Output folder for XMP files and images
         images_folder_name: Name of the images subfolder (default: "images")
         copy_images: Whether to copy images to output folder
         sensor_width: Sensor width in mm (for focal length conversion)
-        
+        export_point_cloud: Export the SfMData landmarks (structure section)
+            as a PLY point cloud next to the XMP files
+        point_cloud_filename: Name of the exported PLY file
+
     Returns:
         Dict with conversion statistics
     """
@@ -297,7 +307,8 @@ def convert_sfmdata_to_rc(
         'views_total': len(views),
         'views_processed': 0,
         'views_skipped': 0,
-        'images_copied': 0
+        'images_copied': 0,
+        'points_exported': 0
     }
     
     for view in views:
@@ -397,10 +408,24 @@ def convert_sfmdata_to_rc(
         
         stats['views_processed'] += 1
     
+    # =========================================================================
+    # Export point cloud (SfMData landmarks) in the XMP coordinate frame
+    # =========================================================================
+
+    if export_point_cloud:
+        structure = sfm_dict.get('structure', [])
+        if structure:
+            points_av, colors = points_from_landmarks(structure)
+            points_rc = av_points_to_rc(points_av)
+            ply_path = output_path / point_cloud_filename
+            save_point_cloud_ply(str(ply_path), points_rc, colors)
+            stats['points_exported'] = len(points_rc)
+            print(f"Wrote {len(points_rc)} points to {ply_path}")
+
     print(f"Wrote {stats['views_processed']} XMP files to {output_folder}")
     if copy_images:
         print(f"Copied {stats['images_copied']} images to {images_output_path}")
-    
+
     return stats
 
 
@@ -438,15 +463,27 @@ Examples:
         default=36.0,
         help='Default sensor width in mm (default: 36.0)'
     )
-    
+    parser.add_argument(
+        '--no-point-cloud',
+        action='store_true',
+        help='Do not export the SfMData landmarks as a PLY point cloud'
+    )
+    parser.add_argument(
+        '--point-cloud-filename',
+        default='point_cloud.ply',
+        help='Name of the exported point cloud file (default: point_cloud.ply)'
+    )
+
     args = parser.parse_args()
-    
+
     convert_sfmdata_to_rc(
         sfmdata_path=args.sfmdata,
         output_folder=args.output_folder,
         images_folder_name=args.images_folder,
         copy_images=not args.no_copy_images,
-        sensor_width=args.sensor_width
+        sensor_width=args.sensor_width,
+        export_point_cloud=not args.no_point_cloud,
+        point_cloud_filename=args.point_cloud_filename
     )
 
 

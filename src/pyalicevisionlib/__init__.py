@@ -64,6 +64,14 @@ from .evaluation import (
 from .rendering import (
     render_normal_map,
 )
+from .pointcloud import (
+    load_point_cloud,
+    save_point_cloud_ply,
+    rc_points_to_av,
+    av_points_to_rc,
+    landmarks_from_points,
+    points_from_landmarks,
+)
 from .image import (
     load_image,
     load_gray,
@@ -119,6 +127,13 @@ __all__ = [
     "get_available_backends",
     # Rendering
     "render_normal_map",
+    # Point cloud
+    "load_point_cloud",
+    "save_point_cloud_ply",
+    "rc_points_to_av",
+    "av_points_to_rc",
+    "landmarks_from_points",
+    "points_from_landmarks",
     # Evaluation
     "ChamferResult",
     "PrecisionRecallResult",
