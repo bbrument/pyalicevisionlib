@@ -9,7 +9,7 @@ Python utilities for working with **AliceVision/Meshroom** data:
 - 📊 **Mesh evaluation** — Chamfer distance, precision/recall, F-score computation
 - 🧹 **Visibility-based cleanup** — Remove invisible mesh regions using camera masks
 - 🎨 **3D visualization** — Interactive camera and mesh visualization with matplotlib
-- 🔄 **Format conversion** — RealityCapture XMP to AliceVision SfMData
+- 🔄 **Format conversion** — RealityCapture (XMP + point clouds), COLMAP, Metashape, IDR ↔ AliceVision SfMData
 - 🖼️ **Image processing** — Unified image I/O with EXR/HDR support, contour extraction
 
 ## Installation
@@ -70,6 +70,20 @@ run_evaluation(
 
 ### CLI Tools
 
+Full reference with all options: [docs/cli.md](docs/cli.md)
+
+| Command | Purpose |
+|---------|---------|
+| `pyav-rc2sfm` / `pyav-sfm2rc` | RealityCapture XMP (+ point cloud) ↔ SfMData |
+| `pyav-colmap2sfm` / `pyav-sfm2colmap` | COLMAP sparse reconstruction ↔ SfMData |
+| `pyav-metashape2sfm` / `pyav-sfm2metashape` | Agisoft Metashape XML ↔ SfMData |
+| `pyav-idr2sfm` / `pyav-sfm2idr` | IDR `cameras.npz` ↔ SfMData |
+| `pyav-visualize` | 3D visualization of cameras and meshes |
+| `pyav-evaluate` | Mesh quality evaluation against ground truth |
+| `pyav-transform` | Apply a 4x4 transform to meshes and cameras |
+| `pyav-contours` | Canny edge contours from SfMData images |
+| `pyav-render-normals` | Render normal maps and masks from a mesh |
+
 ```bash
 # Visualize cameras and mesh
 pyav-visualize sfmdata.json --mesh mesh.ply --mesh-points 5000
@@ -77,8 +91,11 @@ pyav-visualize sfmdata.json --mesh mesh.ply --mesh-points 5000
 # Evaluate mesh quality against ground truth
 pyav-evaluate --data-mesh mesh.ply --gt-mesh gt.ply --output-dir results/
 
-# Convert RealityCapture XMP to AliceVision SfMData
-pyav-rc2sfm xmp_folder/ images_folder/ output.json
+# Convert RealityCapture XMP (+ point cloud) to AliceVision SfMData
+pyav-rc2sfm xmp_folder/ images_folder/ output.json --point-cloud cloud.ply
+
+# Convert SfMData back to RealityCapture (XMP + point_cloud.ply)
+pyav-sfm2rc sfmdata.json rc_export/
 
 # Apply transformation to mesh and cameras
 pyav-transform --mesh model.ply -t transform.npy -o aligned.ply \
